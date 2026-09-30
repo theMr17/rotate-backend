@@ -1,10 +1,9 @@
-from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from .views imoprt ItemViewSet
+from .views import item_list, item_detail
 
 
-router = DefaultRouter()
-
-router.register("items", ItemViewSet, basename="item")
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("items/", item_list),
+    path("items/<int:id>/", item_detail),
+]
