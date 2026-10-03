@@ -1,6 +1,9 @@
 from django.db import models
 from django.conf import settings
 
+class InvalidTransition(Exception):
+    pass
+
 class Order(models.Model):
     class Status(models.TextChoices):
         REQUESTED = 'requested', 'Requested'
@@ -11,6 +14,18 @@ class Order(models.Model):
         RETURNED = 'returned', 'Returned'
         DISPUTED = 'disputed', 'Disputed'
         COMPLETED = 'completed', 'Completed'
+
+    ALLOWED_TRANSITIONS = {
+        Status.REQUESTED: {Status.ACCEPTED, Status.REJECTED, Status.CANCELLED},
+        Status.ACCEPTED: {Status.ACTIVE, Status.CANCELLED},
+        Status.ACTIVE: {Status.RETURNED},
+        Status.RETURNED: {Status.COMPLETED, Status.DISPUTED},
+        Status.DISPUTED: {Status.COMPLETED},
+        Status.REJECTED: set(),
+        Status.CANCELLED: set(),
+        Status.COMPLETED: set(),
+    }
+            
 
     item = models.ForeignKey(
         'items.Item', on_delete=models.PROTECT, related_name='orders'
@@ -44,6 +59,17 @@ class Order(models.Model):
 
     def __str__(self):
         return f'Order #{self.pk} ({self.status})'
+    
+    def can_transition_to(self, new_status):
+        return new_status in self.ALLOWED_TRANSITIONS[self.status]
+
+    def transition_to(self, new_status):
+        if not self.can_transition_to(new_status):
+            raise InvalidTransition(
+                f'Cannot move order #{self.pk} from {self.status} to {new_status}'
+            )
+        self.status = new_status
+        self.save(update_fields=['status', 'updated_at'])
 
 class Offer(models.Model):
     class Status(models.TextChoices):
