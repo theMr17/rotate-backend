@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
-
+CORS_ALLOW_CREDENTIALS = True
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-insecure-key')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
