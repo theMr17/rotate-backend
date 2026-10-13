@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'health',
     'rest_framework',
     'corsheaders',
+    'items',
     'orders',
 ]
 
