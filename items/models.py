@@ -1,4 +1,6 @@
 from django.db import models
+from django.conf import settings
+from django.db import models
 
 # Create your models here.
 class Item(models.Model):
@@ -46,7 +48,7 @@ class Item(models.Model):
         default="AVAILABLE"
     )
 
-    created_at = models.DateTimeField(auto_now_add = TRUE)
-    updated_at = models.DateTimeField(auto_now=TRUE)
+    created_at = models.DateTimeField(auto_now_add = True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     
