@@ -4,6 +4,7 @@ from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
@@ -35,6 +36,13 @@ class LoginSerializer(serializers.Serializer):
 		return attrs
 
 
+class ProfileSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = User
+		fields = ('id', 'name', 'email', 'phone', 'location', 'role', 'is_verified', 'created_at', 'updated_at')
+		read_only_fields = fields
+
+
 def token_response(user):
 	refresh = RefreshToken.for_user(user)
 	return {'access': str(refresh.access_token), 'refresh': str(refresh)}
@@ -60,3 +68,24 @@ class LoginView(APIView):
 		serializer = LoginSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
 		return Response(token_response(serializer.validated_data['user']))
+
+
+class ProfileView(APIView):
+	def get(self, request):
+		return Response(ProfileSerializer(request.user).data)
+
+
+class LogoutView(APIView):
+	permission_classes = [AllowAny]
+
+	def post(self, request):
+		refresh_token = request.data.get('refresh')
+		if not refresh_token:
+			return Response({'refresh': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
+
+		try:
+			RefreshToken(refresh_token).blacklist()
+		except TokenError:
+			return Response({'refresh': ['Invalid or expired refresh token.']}, status=status.HTTP_400_BAD_REQUEST)
+
+		return Response(status=status.HTTP_204_NO_CONTENT)
