@@ -11,6 +11,9 @@ load_dotenv(BASE_DIR / '.env')
 
 CORS_ALLOW_CREDENTIALS = True
 
+# Authentication
+LOGIN_REDIRECT_URL = "/api/items/"
+
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-insecure-key')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
 ALLOWED_HOSTS = [
