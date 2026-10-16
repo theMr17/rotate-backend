@@ -261,7 +261,7 @@ All order operations should be performed with a valid access token unless the re
 
 The order workflow supports states such as:
 
-`requested → accepted → active → returned → completed`
+`requested -> accepted -> active -> returned -> completed`
 
 Orders may also enter a disputed state.
 
