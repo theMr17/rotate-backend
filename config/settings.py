@@ -4,11 +4,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Authentication
+LOGIN_REDIRECT_URL = "/api/items/"
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-insecure-key')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'false').lower() == 'true'
@@ -78,7 +82,7 @@ DATABASES = {
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
         'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5433'),
     }
 }
 
