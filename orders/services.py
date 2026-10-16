@@ -24,6 +24,8 @@ def overlapping_bookings(item, start_time, end_time):
 def request_rental(borrower, item, start_time, end_time, hourly_rate, message=''):
     if item.owner_id == borrower.id:
         raise OrderError("You can't rent your own item.")
+    if item.status != "AVAILABLE":
+        raise OrderError("This item is not currently available for rental.")
     if start_time < timezone.now():
         raise OrderError('Start time must be in the future.')
     if end_time <= start_time:
@@ -38,6 +40,7 @@ def request_rental(borrower, item, start_time, end_time, hourly_rate, message=''
             lender=item.owner,
             start_time=start_time,
             end_time=end_time,
+            deposit_amount=item.deposit_amount,
         )
         Offer.objects.create(
             order=order, proposed_by=borrower, hourly_rate=hourly_rate, message=message

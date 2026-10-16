@@ -1,8 +1,22 @@
+from decimal import Decimal
+
 from rest_framework import serializers
+
 from .models import Item
 
 
 class ItemSerializer(serializers.ModelSerializer):
+    hourly_rate = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
+
+    deposit_amount = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+    )
 
     class Meta:
         model = Item
@@ -12,7 +26,7 @@ class ItemSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "category",
-            "rate",
+            "hourly_rate",
             "deposit_amount",
             "condition",
             "status",
