@@ -1,5 +1,5 @@
 from django.db.models import Q
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +9,7 @@ from . import services
 from .models import InvalidTransition, Order
 from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer
 
-class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
