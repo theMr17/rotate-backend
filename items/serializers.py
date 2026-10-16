@@ -16,6 +16,8 @@ class ItemSerializer(serializers.ModelSerializer):
         max_digits=10,
         decimal_places=2,
         min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
     )
 
     class Meta:
