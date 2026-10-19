@@ -33,7 +33,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         order = self._run(
             services.request_rental, borrower=request.user, **serializer.validated_data
         )
-        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+        return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def counter(self, request, pk=None):
@@ -43,17 +43,17 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
             services.counter_offer, self.get_object(), request.user,
             **serializer.validated_data,
         )
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
         self._run(services.accept_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         self._run(services.reject_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     def _run(self, func, *args, **kwargs):
         try:

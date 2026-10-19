@@ -120,3 +120,11 @@ def reject_offer(order, user):
         offer.save(update_fields=['status'])
         order.transition_to(Order.Status.REJECTED)
     return order
+
+def available_actions(order, user):
+    if order.status != Order.Status.REQUESTED:
+        return []
+    for offer in order.offers.all():
+        if offer.status == Offer.Status.PENDING and offer.proposed_by_id != user.id:
+            return ['accept', 'counter', 'reject']
+    return []
