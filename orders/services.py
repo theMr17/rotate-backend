@@ -122,9 +122,74 @@ def reject_offer(order, user):
     return order
 
 def available_actions(order, user):
-    if order.status != Order.Status.REQUESTED:
-        return []
-    for offer in order.offers.all():
-        if offer.status == Offer.Status.PENDING and offer.proposed_by_id != user.id:
-            return ['accept', 'counter', 'reject']
-    return []
+    is_lender = order.lender_id == user.id
+    is_borrower = order.borrower_id == user.id
+    actions = []
+
+    if order.status == Order.Status.REQUESTED:
+        for offer in order.offers.all():
+            if offer.status == Offer.Status.PENDING and offer.proposed_by_id != user.id:
+                return ['accept', 'counter', 'reject']
+        actions.append('cancel')
+
+    elif order.status == Order.Status.ACCEPTED:
+        if is_lender:
+            actions.append('start')
+        actions.append('cancel')
+
+    elif order.status == Order.Status.ACTIVE:
+        if is_borrower:
+            actions.append('return')
+
+    elif order.status == Order.Status.RETURNED:
+        if is_lender:
+            actions.append('complete')
+        actions.append('dispute')
+
+    return actions
+
+def _lock_order(order):
+    return Order.objects.select_for_update().get(pk=order.pk)
+
+def _check_participant(order, user):
+    if user.id not in (order.borrower_id, order.lender_id):
+        raise OrderError('You are not part of this order.')
+
+def cancel_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        _check_participant(order, user)
+        order.offers.filter(status=Offer.Status.PENDING).update(status=Offer.Status.REJECTED)
+        order.transition_to(Order.Status.CANCELLED)
+    return order
+
+def start_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.lender_id:
+            raise OrderError('Only the lender can confirm the handover.')
+        order.transition_to(Order.Status.ACTIVE)
+    return order
+
+def return_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.borrower_id:
+            raise OrderError('Only the borrower can mark the item as returned.')
+        order.transition_to(Order.Status.RETURNED)
+    return order
+
+def complete_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.lender_id:
+            raise OrderError('Only the lender can complete the order.')
+        order.transition_to(Order.Status.COMPLETED)
+    return order
+
+def dispute_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        _check_participant(order, user)
+        order.transition_to(Order.Status.DISPUTED)
+    return order

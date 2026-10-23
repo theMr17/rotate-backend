@@ -55,6 +55,31 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         self._run(services.reject_offer, self.get_object(), request.user)
         return Response(self.get_serializer(self.get_object()).data)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        self._run(services.cancel_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        self._run(services.start_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'], url_path='return')
+    def mark_returned(self, request, pk=None):
+        self._run(services.return_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        self._run(services.complete_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def dispute(self, request, pk=None):
+        self._run(services.dispute_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
     def _run(self, func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
