@@ -45,6 +45,13 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True
     )
     deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    returned_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='orders_cancelled',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -63,13 +70,16 @@ class Order(models.Model):
     def can_transition_to(self, new_status):
         return new_status in self.ALLOWED_TRANSITIONS[self.status]
 
-    def transition_to(self, new_status):
+    def transition_to(self, new_status, **fields):
+        """Move to new_status, saving any extra fields (e.g. timestamps) in the same write."""
         if not self.can_transition_to(new_status):
             raise InvalidTransition(
-                f'Cannot move order #{self.pk} from {self.status} to {new_status}'
+                f'Cannot move order #{self.pk} from {self.status} to {new_status}.'
             )
         self.status = new_status
-        self.save(update_fields=['status', 'updated_at'])
+        for name, value in fields.items():
+            setattr(self, name, value)
+        self.save(update_fields=['status', 'updated_at', *fields])
 
 class Offer(models.Model):
     class Status(models.TextChoices):
