@@ -13,6 +13,7 @@ class OrderSerializer(serializers.ModelSerializer):
     borrower = serializers.StringRelatedField()
     lender = serializers.StringRelatedField()
     item_title = serializers.CharField(source='item.title', read_only=True)
+    cancelled_by = serializers.StringRelatedField()
     offers = OfferSerializer(many=True, read_only=True)
 
     class Meta:
@@ -20,6 +21,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'item', 'item_title', 'borrower', 'lender', 'start_time', 'end_time',
             'status', 'agreed_hourly_rate', 'deposit_amount', 'offers',
+            'started_at', 'returned_at', 'completed_at', 'cancelled_by',
             'created_at', 'updated_at',
         ]
         read_only_fields = fields
