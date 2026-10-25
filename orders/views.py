@@ -1,7 +1,7 @@
 from django.db.models import Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -17,7 +17,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         user = self.request.user
         queryset = (
             Order.objects.filter(Q(borrower=user) | Q(lender=user))
-            .select_related('item', 'borrower', 'lender')
+            .select_related('item', 'borrower', 'lender', 'cancelled_by')
             .prefetch_related('offers__proposed_by')
         )
         role = self.request.query_params.get('role')
@@ -55,8 +55,34 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         self._run(services.reject_offer, self.get_object(), request.user)
         return Response(OrderSerializer(self.get_object()).data)
 
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        return self._transition(services.cancel_order)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        return self._transition(services.start_order)
+
+    @action(detail=True, methods=['post'], url_path='return')
+    def mark_returned(self, request, pk=None):
+        return self._transition(services.return_order)
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        return self._transition(services.complete_order)
+
+    @action(detail=True, methods=['post'])
+    def dispute(self, request, pk=None):
+        return self._transition(services.dispute_order)
+
+    def _transition(self, func):
+        self._run(func, self.get_object(), self.request.user)
+        return Response(OrderSerializer(self.get_object()).data)
+
     def _run(self, func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except services.OrderPermissionError as error:
+            raise PermissionDenied(str(error))
         except (services.OrderError, InvalidTransition) as error:
             raise ValidationError({'detail': str(error)})
