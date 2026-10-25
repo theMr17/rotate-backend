@@ -1,6 +1,7 @@
 """Django settings for the config project."""
 
 import os
+from decimal import Decimal
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -147,6 +148,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
+
+PLATFORM_FEE_PERCENT = Decimal(os.environ.get('PLATFORM_FEE_PERCENT', '10'))
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
