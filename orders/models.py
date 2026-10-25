@@ -1,5 +1,24 @@
-from django.db import models
+import secrets
+
 from django.conf import settings
+from django.db import IntegrityError, models, transaction
+
+BOOKING_REF_PREFIX = 'ROT-'
+# Crockford base32: digits + letters minus I, L, O, U, so refs are easy to read aloud
+# and hard to mistype. 6 chars = 32**6 ~ 1.07 billion refs.
+BOOKING_REF_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+BOOKING_REF_LENGTH = 6
+BOOKING_REF_ATTEMPTS = 5
+
+
+def generate_booking_ref():
+    code = ''.join(secrets.choice(BOOKING_REF_ALPHABET) for _ in range(BOOKING_REF_LENGTH))
+    return f'{BOOKING_REF_PREFIX}{code}'
+
+
+class BookingRefUnavailable(Exception):
+    pass
+
 
 class InvalidTransition(Exception):
     pass
@@ -27,6 +46,7 @@ class Order(models.Model):
     }
             
 
+    booking_ref = models.CharField(max_length=16, unique=True, editable=False)
     item = models.ForeignKey(
         'items.Item', on_delete=models.PROTECT, related_name='orders'
     )
@@ -45,6 +65,9 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True
     )
     deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    rental_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_due = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     returned_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -65,7 +88,26 @@ class Order(models.Model):
         ]
 
     def __str__(self):
-        return f'Order #{self.pk} ({self.status})'
+        return f'Order {self.booking_ref or self.pk} ({self.status})'
+
+    def save(self, *args, **kwargs):
+        if self.booking_ref:
+            return super().save(*args, **kwargs)
+        
+        for _ in range(BOOKING_REF_ATTEMPTS):
+            self.booking_ref = generate_booking_ref()
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError as error:
+                if 'booking_ref' not in str(error):
+                    self.booking_ref = ''
+                    raise
+        
+        self.booking_ref = ''
+        raise BookingRefUnavailable(
+            'Could not allocate a booking reference. Please try again.'
+        )
     
     def can_transition_to(self, new_status):
         return new_status in self.ALLOWED_TRANSITIONS[self.status]
@@ -110,4 +152,4 @@ class Offer(models.Model):
         ]
 
     def __str__(self):
-        return f'Offer Rs{self.hourly_rate}/hr on Order #{self.order_id} ({self.status})'
+        return f'Offer ₹{self.hourly_rate}/hr on Order #{self.order_id} ({self.status})'

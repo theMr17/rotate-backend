@@ -19,8 +19,9 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            'id', 'item', 'item_title', 'borrower', 'lender', 'start_time', 'end_time',
-            'status', 'agreed_hourly_rate', 'deposit_amount', 'offers',
+            'id', 'booking_ref', 'item', 'item_title', 'borrower', 'lender', 'start_time', 'end_time',
+            'status', 'agreed_hourly_rate', 'rental_fee', 'platform_fee', 'deposit_amount',
+            'total_due', 'offers',
             'started_at', 'returned_at', 'completed_at', 'cancelled_by',
             'created_at', 'updated_at',
         ]
@@ -41,3 +42,26 @@ class CounterOfferSerializer(serializers.Serializer):
         max_digits=10, decimal_places=2, min_value=Decimal('0.01')
     )
     message = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class QuoteQuerySerializer(serializers.Serializer):
+    start = serializers.DateTimeField()
+    end = serializers.DateTimeField()
+    rate = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal('0.01'), required=False
+    )
+
+    def validate(self, attrs):
+        if attrs['end'] <= attrs['start']:
+            raise serializers.ValidationError({'end': 'End time must be after start time.'})
+        return attrs
+
+
+class PriceBreakdownSerializer(serializers.Serializer):
+    billable_hours = serializers.IntegerField()
+    hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2)
+    rental_fee = serializers.DecimalField(max_digits=12, decimal_places=2)
+    platform_fee_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    platform_fee = serializers.DecimalField(max_digits=12, decimal_places=2)
+    deposit = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_due = serializers.DecimalField(max_digits=12, decimal_places=2)
