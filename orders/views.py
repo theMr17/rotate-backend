@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import services
-from .models import InvalidTransition, Order
+from .models import BookingRefUnavailable, InvalidTransition, Order
 from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
@@ -84,5 +84,5 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
             return func(*args, **kwargs)
         except services.OrderPermissionError as error:
             raise PermissionDenied(str(error))
-        except (services.OrderError, InvalidTransition) as error:
+        except (services.OrderError, InvalidTransition, BookingRefUnavailable) as error:
             raise ValidationError({'detail': str(error)})

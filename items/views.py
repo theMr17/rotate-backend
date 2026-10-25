@@ -3,8 +3,11 @@ from django.db.models.deletion import ProtectedError
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
+
+from orders import pricing
+from orders.serializers import PriceBreakdownSerializer, QuoteQuerySerializer
 
 from .models import Item
 from .permissions import IsOwnerOrReadOnly
@@ -114,3 +117,24 @@ def item_detail(request, id):
             )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def item_quote(request, id):
+    try:
+        item = Item.objects.get(id=id)
+    except Item.DoesNotExist:
+        return Response({"detail": "Item not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    query = QuoteQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    params = query.validated_data
+
+    breakdown = pricing.calculate(
+        params.get("rate", item.hourly_rate),
+        params["start"],
+        params["end"],
+        item.deposit_amount,
+    )
+    return Response(PriceBreakdownSerializer(breakdown).data)

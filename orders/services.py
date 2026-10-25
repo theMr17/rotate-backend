@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
+from . import pricing
 from .models import Offer, Order
 from items.models import Item
 
@@ -97,9 +98,16 @@ def accept_offer(order, user):
 
         offer.status = Offer.Status.ACCEPTED
         offer.save(update_fields=['status'])
-        order.agreed_hourly_rate = offer.hourly_rate
-        order.save(update_fields=['agreed_hourly_rate'])
-        order.transition_to(Order.Status.ACCEPTED)
+        breakdown = pricing.calculate(
+            offer.hourly_rate, order.start_time, order.end_time, order.deposit_amount
+        )
+        order.transition_to(
+            Order.Status.ACCEPTED,
+            agreed_hourly_rate=offer.hourly_rate,
+            rental_fee=breakdown.rental_fee,
+            platform_fee=breakdown.platform_fee,
+            total_due=breakdown.total_due,
+        )
 
         clashing = Order.objects.filter(
             item_id=order.item_id,
