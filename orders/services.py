@@ -139,6 +139,47 @@ def reject_offer(order, user):
 BORROWER = 'borrower'
 LENDER = 'lender'
 
+# action -> (roles that may perform it, statuses it may be performed from).
+# Single source of truth for both enforcement and `allowed_actions`.
+LIFECYCLE_RULES = {
+    'cancel': ((BORROWER, LENDER), (Order.Status.REQUESTED, Order.Status.ACCEPTED)),
+    'start': ((LENDER,), (Order.Status.ACCEPTED,)),
+    'return': ((BORROWER,), (Order.Status.ACTIVE,)),
+    'complete': ((LENDER,), (Order.Status.RETURNED,)),
+    'dispute': ((BORROWER, LENDER), (Order.Status.RETURNED,)),
+}
+ACTION_ORDER = ['accept', 'counter', 'reject', 'cancel', 'start', 'return', 'complete', 'dispute']
+
+
+def role_of(order, user):
+    if user.id == order.borrower_id:
+        return BORROWER
+    if user.id == order.lender_id:
+        return LENDER
+    return None
+
+
+def allowed_actions(order, user):
+    """Actions `user` may take on `order` right now, mirroring the service checks.
+
+    Uses prefetched offers and the joined item, so it adds no queries. Overlap with
+    other bookings is only checked when `accept` is actually called.
+    """
+    role = role_of(order, user)
+    if role is None:
+        return []
+    actions = set()
+    if order.status == Order.Status.REQUESTED:
+        pending = next((o for o in order.offers.all() if o.status == Offer.Status.PENDING), None)
+        if pending is not None and pending.proposed_by_id != user.id:
+            actions |= {'counter', 'reject'}
+            if order.item.status == 'AVAILABLE':
+                actions.add('accept')
+    for name, (roles, statuses) in LIFECYCLE_RULES.items():
+        if role in roles and order.status in statuses:
+            actions.add(name)
+    return [name for name in ACTION_ORDER if name in actions]
+
 
 def _lock(order):
     return Order.objects.select_for_update().get(pk=order.pk)
@@ -165,12 +206,17 @@ def _check_status(order, allowed_from, action):
         )
 
 
+def _check_rule(order, user, action, verb):
+    roles, statuses = LIFECYCLE_RULES[action]
+    _check_role(order, user, roles, verb)
+    _check_status(order, statuses, action)
+
+
 def cancel_order(order, user):
     """Either party may cancel before the handover (requested or accepted)."""
     with transaction.atomic():
         order = _lock(order)
-        _check_role(order, user, (BORROWER, LENDER), 'cancel')
-        _check_status(order, (Order.Status.REQUESTED, Order.Status.ACCEPTED), 'cancel')
+        _check_rule(order, user, 'cancel', 'cancel')
         order.offers.filter(status=Offer.Status.PENDING).update(status=Offer.Status.REJECTED)
         order.transition_to(Order.Status.CANCELLED, cancelled_by=user)
     return order
@@ -180,8 +226,7 @@ def start_order(order, user):
     """The lender confirms the item has been handed over."""
     with transaction.atomic():
         order = _lock(order)
-        _check_role(order, user, (LENDER,), 'confirm handover for')
-        _check_status(order, (Order.Status.ACCEPTED,), 'start')
+        _check_rule(order, user, 'start', 'confirm handover for')
         order.transition_to(Order.Status.ACTIVE, started_at=timezone.now())
     return order
 
@@ -190,8 +235,7 @@ def return_order(order, user):
     """The borrower marks the item as returned."""
     with transaction.atomic():
         order = _lock(order)
-        _check_role(order, user, (BORROWER,), 'mark as returned')
-        _check_status(order, (Order.Status.ACTIVE,), 'return')
+        _check_rule(order, user, 'return', 'mark as returned')
         order.transition_to(Order.Status.RETURNED, returned_at=timezone.now())
     return order
 
@@ -204,8 +248,7 @@ def complete_order(order, user):
     """
     with transaction.atomic():
         order = _lock(order)
-        _check_role(order, user, (LENDER,), 'complete')
-        _check_status(order, (Order.Status.RETURNED,), 'complete')
+        _check_rule(order, user, 'complete', 'complete')
         order.transition_to(Order.Status.COMPLETED, completed_at=timezone.now())
     return order
 
@@ -214,7 +257,6 @@ def dispute_order(order, user):
     """Either party may raise a dispute once the item is marked returned."""
     with transaction.atomic():
         order = _lock(order)
-        _check_role(order, user, (BORROWER, LENDER), 'dispute')
-        _check_status(order, (Order.Status.RETURNED,), 'dispute')
+        _check_rule(order, user, 'dispute', 'dispute')
         order.transition_to(Order.Status.DISPUTED)
     return order

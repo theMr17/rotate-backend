@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from . import services
-from .models import BookingRefUnavailable, InvalidTransition, Order
+from .models import BookingRefUnavailable, InvalidTransition, Offer, Order
 from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
@@ -18,13 +18,39 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         queryset = (
             Order.objects.filter(Q(borrower=user) | Q(lender=user))
             .select_related('item', 'borrower', 'lender', 'cancelled_by')
-            .prefetch_related('offers__proposed_by')
+            .prefetch_related('offers')
         )
-        role = self.request.query_params.get('role')
+        if self.action != 'list':
+            return queryset
+        return self._filter(queryset, user, self.request.query_params)
+
+    def _filter(self, queryset, user, params):
+        role = params.get('role')
         if role == 'borrower':
             queryset = queryset.filter(borrower=user)
         elif role == 'lender':
             queryset = queryset.filter(lender=user)
+
+        # ?status=accepted or ?status=accepted,active
+        if params.get('status'):
+            statuses = [value.strip() for value in params['status'].split(',') if value.strip()]
+            unknown = sorted(set(statuses) - set(Order.Status.values))
+            if unknown:
+                raise ValidationError({
+                    'status': f"Unknown status: {', '.join(unknown)}. "
+                              f"Choose from: {', '.join(Order.Status.values)}."
+                })
+            queryset = queryset.filter(status__in=statuses)
+
+        # ?needs_action=true: a pending offer from the other party is waiting on me.
+        needs_action = params.get('needs_action', '').lower()
+        if needs_action in ('true', '1'):
+            waiting_on_me = Offer.objects.filter(
+                order=OuterRef('pk'), status=Offer.Status.PENDING,
+            ).exclude(proposed_by=user)
+            queryset = queryset.filter(Exists(waiting_on_me), status=Order.Status.REQUESTED)
+        elif needs_action not in ('', 'false', '0'):
+            raise ValidationError({'needs_action': 'Use true or false.'})
         return queryset
 
     def create(self, request):
@@ -33,7 +59,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         order = self._run(
             services.request_rental, borrower=request.user, **serializer.validated_data
         )
-        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+        return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def counter(self, request, pk=None):
@@ -43,17 +69,17 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
             services.counter_offer, self.get_object(), request.user,
             **serializer.validated_data,
         )
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
         self._run(services.accept_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         self._run(services.reject_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -77,7 +103,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
 
     def _transition(self, func):
         self._run(func, self.get_object(), self.request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     def _run(self, func, *args, **kwargs):
         try:

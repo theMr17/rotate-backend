@@ -131,7 +131,7 @@ class AllowedTransitionTests(OrderTestBase):
                 response = self.act(order, 'cancel', role)
                 order.refresh_from_db()
                 self.assertEqual(order.cancelled_by, self.user_for(role))
-                self.assertEqual(response.data['cancelled_by'], str(self.user_for(role)))
+                self.assertEqual(response.data['cancelled_by'], self.user_for(role).id)
 
     def test_cancel_closes_pending_offer(self):
         order = self.make_order(S.REQUESTED)
