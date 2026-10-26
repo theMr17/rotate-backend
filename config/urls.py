@@ -27,4 +27,5 @@ urlpatterns = [
     path('api/v1/', include('orders.urls')),
     path('api/v1/', include('items.urls')),
     path('api-auth/', include('rest_framework.urls')),
+    path('api/v1/', include('rental_needs.urls')),
 ]
