@@ -7,15 +7,18 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from geo.fields import LatLngField
+
 from .models import User
 
 
 class RegisterSerializer(serializers.ModelSerializer):
 	password = serializers.CharField(write_only=True, min_length=8)
+	home_location = LatLngField(required=False, allow_null=True)
 
 	class Meta:
 		model = User
-		fields = ('name', 'email', 'password', 'phone', 'location', 'role')
+		fields = ('name', 'email', 'password', 'phone', 'location', 'home_location', 'home_address_label', 'role')
 		extra_kwargs = {'role': {'read_only': True}}
 
 	def create(self, validated_data):
@@ -37,10 +40,15 @@ class LoginSerializer(serializers.Serializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+	home_location = LatLngField(required=False, allow_null=True)
+
 	class Meta:
 		model = User
-		fields = ('id', 'name', 'email', 'phone', 'location', 'role', 'is_verified', 'created_at', 'updated_at')
-		read_only_fields = fields
+		fields = (
+			'id', 'name', 'email', 'phone', 'location', 'home_location', 'home_address_label',
+			'role', 'is_verified', 'created_at', 'updated_at',
+		)
+		read_only_fields = ('id', 'email', 'role', 'is_verified', 'created_at', 'updated_at')
 
 
 def token_response(user):
@@ -73,6 +81,12 @@ class LoginView(APIView):
 class ProfileView(APIView):
 	def get(self, request):
 		return Response(ProfileSerializer(request.user).data)
+
+	def patch(self, request):
+		serializer = ProfileSerializer(request.user, data=request.data, partial=True)
+		serializer.is_valid(raise_exception=True)
+		serializer.save()
+		return Response(serializer.data)
 
 
 class LogoutView(APIView):
