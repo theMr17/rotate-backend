@@ -86,6 +86,13 @@ pytest
 
 Every run prints a coverage summary to the terminal and writes an HTML report to `htmlcov/index.html`. Configuration lives in `pyproject.toml`.
 
+CI (`.github/workflows/tests.yml`) runs the same suite against Postgres on every pull request and fails if coverage of `items/` or `orders/` drops below 80%. To run the same check locally after `pytest`:
+
+```bash
+coverage report --include='items/*' --fail-under=80
+coverage report --include='orders/*' --fail-under=80
+```
+
 Useful variations:
 
 ```bash

@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: rotate
+          POSTGRES_USER: rotate
+          POSTGRES_PASSWORD: rotate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rotate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-secret
+      POSTGRES_DB: rotate
+      POSTGRES_USER: rotate
+      POSTGRES_PASSWORD: rotate
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_SSLMODE: disable
+      COVERAGE_MIN: "80"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest
+
+      # Checked per app so a well-tested app can't hide a poorly tested one in the total.
+      - name: Coverage threshold (items)
+        run: coverage report --include='items/*' --fail-under="$COVERAGE_MIN"
+
+      - name: Coverage threshold (orders)
+        run: coverage report --include='orders/*' --fail-under="$COVERAGE_MIN"
+
+      - name: Upload HTML coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
+          if-no-files-found: ignore
