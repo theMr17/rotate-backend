@@ -35,6 +35,12 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+For development (adds pytest, pytest-django, pytest-cov and factory_boy), install the dev requirements instead; they include `requirements.txt`:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ### 4. Configure environment variables
 
 Create a `.env` file in the project root and configure the environment variables required by `config/settings.py`, including database credentials and the Django secret key.
@@ -67,6 +73,56 @@ The backend will be available at:
 
 ```text
 http://127.0.0.1:8000/
+```
+
+## Running Tests
+
+Tests run with [pytest](https://docs.pytest.org/) and [pytest-django](https://pytest-django.readthedocs.io/) against the Docker Postgres. Make sure the database is up (`docker compose up -d`) and your `.env` points at it; the database user needs permission to create the throwaway `test_<POSTGRES_DB>` database.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Every run prints a coverage summary to the terminal and writes an HTML report to `htmlcov/index.html`. Configuration lives in `pyproject.toml`.
+
+Useful variations:
+
+```bash
+pytest user/                      # one app
+pytest orders/tests.py -k cancel  # tests matching a name
+pytest --reuse-db                 # keep the test DB between runs (faster; drop the flag after adding migrations)
+pytest --no-cov                   # skip coverage, e.g. when debugging with --pdb
+```
+
+### Writing tests
+
+- Put tests in `<app>/tests.py` or `<app>/test_*.py`. Plain `def test_...()` functions and Django `TestCase`/`APITestCase` classes both work.
+- Functions that touch the database need `@pytest.mark.django_db` (or `pytestmark = pytest.mark.django_db` at module level).
+- Use `reverse('<url-name>')` instead of hard-coding paths.
+- Shared fixtures in `conftest.py`:
+  - `api_client`: unauthenticated DRF `APIClient`
+  - `user`: a saved user whose password is `user.factories.DEFAULT_PASSWORD`
+  - `auth_client`: an `APIClient` sending a real JWT for `user` (also available as `auth_client.user`)
+- Factories (factory_boy) build valid model instances with sensible defaults:
+  - `user.factories.UserFactory`
+  - `items.factories.ItemFactory`: creates an owner too
+  - `orders.factories.OrderFactory`: lender is the item's owner, and a `requested` order gets a pending offer (`offer=False` to skip it)
+  - `orders.factories.OfferFactory`
+
+```python
+import pytest
+from django.urls import reverse
+
+from orders.factories import OrderFactory
+from orders.models import Order
+
+@pytest.mark.django_db
+def test_lender_can_start_accepted_order(api_client):
+    order = OrderFactory(status=Order.Status.ACCEPTED)
+    api_client.force_authenticate(order.lender)
+    response = api_client.post(reverse('order-start', args=[order.pk]))
+    assert response.status_code == 200
 ```
 
 ## API Documentation
@@ -319,8 +375,11 @@ rotate-backend/
 ├── user/            # User model and authentication APIs
 ├── items/           # Item model and listing APIs
 ├── orders/          # Orders and offers APIs
+├── conftest.py      # Shared pytest fixtures
 ├── manage.py        # Django management utility
+├── pyproject.toml   # pytest and coverage configuration
 ├── requirements.txt # Python dependencies
+├── requirements-dev.txt # Test/dev dependencies
 └── .gitignore       # Git ignored files
 ```
 
@@ -336,7 +395,7 @@ git checkout -b feature/<feature-name>
 
 Commit your changes and create a pull request into `main` when the feature is ready.
 
-Before submitting a PR, verify that migrations are included, secrets are excluded, and the relevant API endpoints have been tested.
+Before submitting a PR, verify that migrations are included, secrets are excluded, and `pytest` passes.
 
 ## Tech Stack
 
