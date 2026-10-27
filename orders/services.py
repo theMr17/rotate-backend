@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Offer, Order
+from .models import ConditionPhoto, Offer, Order
 from items.models import Item
 
 
@@ -168,6 +168,8 @@ def start_order(order, user):
         order = _lock_order(order)
         if user.id != order.lender_id:
             raise OrderError('Only the lender can confirm the handover.')
+        if not order.photos.filter(stage=ConditionPhoto.Stage.PRE).exists():
+            raise OrderError('Add at least one handover photo before confirming the handover.')
         order.transition_to(Order.Status.ACTIVE)
     return order
 
@@ -193,3 +195,11 @@ def dispute_order(order, user):
         _check_participant(order, user)
         order.transition_to(Order.Status.DISPUTED)
     return order
+
+def add_condition_photo(order, user, stage, image):
+    _check_participant(order, user)
+    if stage == ConditionPhoto.Stage.PRE and order.status != Order.Status.ACCEPTED:
+        raise OrderError('Handover photos can only be added before the handover.')
+    if stage == ConditionPhoto.Stage.POST and order.status not in (Order.Status.ACTIVE, Order.Status.RETURNED):
+        raise OrderError('Return photos can only be added during or after the rental.')
+    return ConditionPhoto.objects.create(order=order, stage=stage, image=image, uploaded_by=user)

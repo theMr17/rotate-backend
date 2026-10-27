@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from . import services
 from .models import InvalidTransition, Order
-from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer
+from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer, PhotoUploadSerializer
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
     serializer_class = OrderSerializer
@@ -18,7 +18,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         queryset = (
             Order.objects.filter(Q(borrower=user) | Q(lender=user))
             .select_related('item', 'borrower', 'lender')
-            .prefetch_related('offers__proposed_by')
+            .prefetch_related('offers__proposed_by', 'photos__uploaded_by')
         )
         role = self.request.query_params.get('role')
         if role == 'borrower':
@@ -78,6 +78,16 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
     @action(detail=True, methods=['post'])
     def dispute(self, request, pk=None):
         self._run(services.dispute_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def photos(self, request, pk=None):
+        serializer = PhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._run(
+            services.add_condition_photo, self.get_object(), request.user,
+            **serializer.validated_data,
+        )
         return Response(self.get_serializer(self.get_object()).data)
 
     def _run(self, func, *args, **kwargs):

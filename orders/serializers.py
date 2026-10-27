@@ -10,11 +10,23 @@ class OfferSerializer(serializers.ModelSerializer):
         model = Offer
         fields = ['id', 'proposed_by', 'hourly_rate', 'message', 'status', 'created_at']
 
+class ConditionPhotoSerializer(serializers.ModelSerializer):
+    uploaded_by = serializers.StringRelatedField()
+
+    class Meta:
+        model = ConditionPhoto
+        fields = ['id', 'stage', 'image', 'uploaded_by', 'created_at']
+
+class PhotoUploadSerializer(serializers.Serializer):
+    stage = serializers.ChoiceField(choices=ConditionPhoto.Stage.choices)
+    image = serializers.ImageField()
+
 class OrderSerializer(serializers.ModelSerializer):
     borrower = serializers.StringRelatedField()
     lender = serializers.StringRelatedField()
     item_title = serializers.CharField(source='item.title', read_only=True)
     offers = OfferSerializer(many=True, read_only=True)
+    photos = ConditionPhotoSerializer(many=True, read_only=True)
     my_role = serializers.SerializerMethodField()
     available_actions = serializers.SerializerMethodField()
 
@@ -22,7 +34,7 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'item', 'item_title', 'borrower', 'lender', 'start_time', 'end_time',
-            'status', 'agreed_hourly_rate', 'deposit_amount', 'offers',
+            'status', 'agreed_hourly_rate', 'deposit_amount', 'offers', 'photos',
             'my_role', 'available_actions', 'created_at', 'updated_at',
         ]
         read_only_fields = fields
