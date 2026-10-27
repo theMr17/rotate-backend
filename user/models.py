@@ -39,6 +39,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         geography=True, srid=4326, null=True, blank=True, spatial_index=True
     )
     home_address_label = models.CharField(max_length=255, blank=True)
+    profile_photo_url = models.URLField(max_length=500, blank=True)
+    profile_photo_public_id = models.CharField(max_length=255, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
