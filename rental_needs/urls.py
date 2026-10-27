@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     RentalNeedListCreateView,
     RentalNeedDetailView,
+    RentalNeedRespondView,
     RentalNeedCancelView,
 )
 
@@ -25,5 +26,11 @@ urlpatterns = [
         "rental-needs/<int:pk>/cancel/",
         RentalNeedCancelView.as_view(),
         name="rental-need-cancel",
+    ),
+
+    path(
+        "rental-needs/<int:pk>/respond/",
+        RentalNeedRespondView.as_view(),
+        name="rental-need-respond",
     ),
 ]

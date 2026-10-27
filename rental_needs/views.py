@@ -3,14 +3,21 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 from rest_framework import status
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied, ValidationError
+from rest_framework.exceptions import NotAuthenticated, PermissionDenied, ValidationError, NotFound
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import RentalNeed
-from .serializers import RentalNeedSerializer
 
+from . import services
+
+from .serializers import (
+    RentalNeedSerializer,
+    RentalNeedDetailSerializer,
+    RentalNeedResponseCreateSerializer,
+    RentalNeedResponseReadSerializer,
+)
 
 class RentalNeedListCreateView(APIView):
 
@@ -85,8 +92,16 @@ class RentalNeedDetailView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_object(self, pk):
+
         return get_object_or_404(
-            RentalNeed.objects.select_related("requester"),
+            RentalNeed.objects.select_related("requester")
+            .prefetch_related(
+                "responses__provider",
+                "responses__order__item",
+                "responses__order__borrower",
+                "responses__order__lender",
+                "responses__order__offers",
+            ),
             pk=pk,
         )
 
@@ -94,7 +109,10 @@ class RentalNeedDetailView(APIView):
 
         need = self.get_object(pk)
 
-        serializer = RentalNeedSerializer(need)
+        serializer = RentalNeedDetailSerializer(
+            need,
+            context={"request": request},
+        )
 
         return Response(serializer.data)
 
@@ -157,4 +175,42 @@ class RentalNeedCancelView(APIView):
         return Response(
             RentalNeedSerializer(need).data,
             status=status.HTTP_200_OK,
+        )
+
+
+class RentalNeedRespondView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+
+        serializer = RentalNeedResponseCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            response = services.respond_to_need(
+                need_id=pk,
+                provider=request.user,
+                **serializer.validated_data,
+            )
+
+        except RentalNeed.DoesNotExist:
+            raise NotFound("Rental request not found.")
+
+        except services.RentalNeedPermissionError as error:
+            raise PermissionDenied(str(error))
+
+        except services.RentalNeedError as error:
+            raise ValidationError({"detail": str(error)})
+
+        return Response(
+            RentalNeedResponseReadSerializer(
+                response,
+                context={"request": request},
+            ).data,
+            status=status.HTTP_201_CREATED,
         )
