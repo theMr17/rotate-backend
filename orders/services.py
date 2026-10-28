@@ -178,6 +178,8 @@ def return_order(order, user):
         order = _lock_order(order)
         if user.id != order.borrower_id:
             raise OrderError('Only the borrower can mark the item as returned.')
+        if not order.photos.filter(stage=ConditionPhoto.Stage.POST).exists():
+            raise OrderError('Add at least one return photo before marking the item as returned.')
         order.transition_to(Order.Status.RETURNED)
     return order
 
