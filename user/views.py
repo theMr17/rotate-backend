@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
 from rest_framework import serializers, status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,8 +9,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from geo.fields import LatLngField
+from uploads import ImageUploadField
 
 from .models import User
+from .photos import delete_profile_photo, upload_profile_photo
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -46,9 +49,15 @@ class ProfileSerializer(serializers.ModelSerializer):
 		model = User
 		fields = (
 			'id', 'name', 'email', 'phone', 'location', 'home_location', 'home_address_label',
-			'role', 'is_verified', 'created_at', 'updated_at',
+			'profile_photo_url', 'role', 'is_verified', 'created_at', 'updated_at',
 		)
-		read_only_fields = ('id', 'email', 'role', 'is_verified', 'created_at', 'updated_at')
+		read_only_fields = (
+			'id', 'email', 'profile_photo_url', 'role', 'is_verified', 'created_at', 'updated_at',
+		)
+
+
+class ProfilePhotoSerializer(serializers.Serializer):
+	photo = ImageUploadField()
 
 
 def token_response(user):
@@ -87,6 +96,36 @@ class ProfileView(APIView):
 		serializer.is_valid(raise_exception=True)
 		serializer.save()
 		return Response(serializer.data)
+
+
+class ProfilePhotoView(APIView):
+	parser_classes = [MultiPartParser, FormParser]
+
+	def post(self, request):
+		serializer = ProfilePhotoSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+
+		user = request.user
+		# Raises ImageStorageNotConfigured (503) / ImageUploadFailed (502).
+		url, public_id = upload_profile_photo(user, serializer.validated_data['photo'])
+
+		old_public_id = user.profile_photo_public_id
+		user.profile_photo_url = url
+		user.profile_photo_public_id = public_id
+		user.save(update_fields=['profile_photo_url', 'profile_photo_public_id', 'updated_at'])
+		if old_public_id and old_public_id != public_id:
+			delete_profile_photo(old_public_id)
+
+		return Response(ProfileSerializer(user).data)
+
+	def delete(self, request):
+		user = request.user
+		public_id = user.profile_photo_public_id
+		user.profile_photo_url = ''
+		user.profile_photo_public_id = ''
+		user.save(update_fields=['profile_photo_url', 'profile_photo_public_id', 'updated_at'])
+		delete_profile_photo(public_id)
+		return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LogoutView(APIView):

@@ -11,6 +11,7 @@ class UserAdmin(UserAdmin):
 		(None, {'fields': ('email', 'password')}),
 		('Personal info', {'fields': ('name', 'phone', 'location', 'role')}),
 		('Home location', {'fields': ('home_address_label', 'home_location')}),
+		('Profile photo', {'fields': ('profile_photo_url', 'profile_photo_public_id')}),
 		('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
 		('Important dates', {'fields': ('last_login',)}),
 	)
