@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from . import services
 from .models import InvalidTransition, Order
-from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer, PhotoUploadSerializer
+from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer, PhotoUploadSerializer, ResolveDisputeSerializer
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
     serializer_class = OrderSerializer
@@ -15,16 +15,23 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
 
     def get_queryset(self):
         user = self.request.user
-        queryset = (
-            Order.objects.filter(Q(borrower=user) | Q(lender=user))
-            .select_related('item', 'borrower', 'lender')
-            .prefetch_related('offers__proposed_by', 'photos__uploaded_by')
+        if user.is_staff:
+            queryset = Order.objects.all()
+        else:
+            queryset = Order.objects.filter(Q(borrower=user) | Q(lender=user))
+        queryset = queryset.select_related('item', 'borrower', 'lender').prefetch_related(
+            'offers__proposed_by', 'photos__uploaded_by'
         )
+
         role = self.request.query_params.get('role')
         if role == 'borrower':
             queryset = queryset.filter(borrower=user)
         elif role == 'lender':
             queryset = queryset.filter(lender=user)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
         return queryset
 
     def create(self, request):
@@ -86,6 +93,16 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         serializer.is_valid(raise_exception=True)
         self._run(
             services.add_condition_photo, self.get_object(), request.user,
+            **serializer.validated_data,
+        )
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        serializer = ResolveDisputeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._run(
+            services.resolve_dispute, self.get_object(), request.user,
             **serializer.validated_data,
         )
         return Response(self.get_serializer(self.get_object()).data)

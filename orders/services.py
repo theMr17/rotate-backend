@@ -122,6 +122,8 @@ def reject_offer(order, user):
     return order
 
 def available_actions(order, user):
+    if user.is_staff and order.status == Order.Status.DISPUTED:
+        return ['resolve']
     is_lender = order.lender_id == user.id
     is_borrower = order.borrower_id == user.id
     actions = []
@@ -188,6 +190,8 @@ def complete_order(order, user):
         order = _lock_order(order)
         if user.id != order.lender_id:
             raise OrderError('Only the lender can complete the order.')
+        order.deposit_deducted = 0
+        order.save(update_fields=['deposit_deducted'])
         order.transition_to(Order.Status.COMPLETED)
     return order
 
@@ -205,3 +209,18 @@ def add_condition_photo(order, user, stage, image):
     if stage == ConditionPhoto.Stage.POST and order.status not in (Order.Status.ACTIVE, Order.Status.RETURNED):
         raise OrderError('Return photos can only be added during or after the rental.')
     return ConditionPhoto.objects.create(order=order, stage=stage, image=image, uploaded_by=user)
+
+def resolve_dispute(order, admin, deduction, note=''):
+    if not admin.is_staff:
+        raise OrderError('Only an admin can resolve disputes.')
+    with transaction.atomic():
+        order = _lock_order(order)
+        if order.status != Order.Status.DISPUTED:
+            raise OrderError('Only disputed orders can be resolved.')
+        if deduction < 0 or deduction > order.deposit_amount:
+            raise OrderError(f'Deduction must be between 0 and {order.deposit_amount}.')
+        order.deposit_deducted = deduction
+        order.resolution_note = note
+        order.save(update_fields=['deposit_deducted', 'resolution_note'])
+        order.transition_to(Order.Status.COMPLETED)
+    return order
