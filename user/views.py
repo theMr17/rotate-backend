@@ -4,11 +4,13 @@ from rest_framework import serializers, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.generics import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from geo.fields import LatLngField
+from trust.services import trust_summary
 from uploads import ImageUploadField
 
 from .models import User
@@ -44,16 +46,34 @@ class LoginSerializer(serializers.Serializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
 	home_location = LatLngField(required=False, allow_null=True)
+	trust = serializers.SerializerMethodField()
 
 	class Meta:
 		model = User
 		fields = (
 			'id', 'name', 'email', 'phone', 'location', 'home_location', 'home_address_label',
-			'profile_photo_url', 'role', 'is_verified', 'created_at', 'updated_at',
+			'profile_photo_url', 'role', 'is_verified', 'trust', 'created_at', 'updated_at',
 		)
 		read_only_fields = (
 			'id', 'email', 'profile_photo_url', 'role', 'is_verified', 'created_at', 'updated_at',
 		)
+
+	def get_trust(self, user):
+		return trust_summary(user)
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+	"""What other users may see. Never add email, phone or exact location here."""
+
+	trust = serializers.SerializerMethodField()
+
+	class Meta:
+		model = User
+		fields = ('id', 'name', 'location', 'profile_photo_url', 'is_verified', 'trust', 'created_at')
+		read_only_fields = fields
+
+	def get_trust(self, user):
+		return trust_summary(user)
 
 
 class ProfilePhotoSerializer(serializers.Serializer):
@@ -96,6 +116,12 @@ class ProfileView(APIView):
 		serializer.is_valid(raise_exception=True)
 		serializer.save()
 		return Response(serializer.data)
+
+
+class PublicProfileView(APIView):
+	def get(self, request, user_id):
+		user = get_object_or_404(User, pk=user_id, is_active=True)
+		return Response(PublicProfileSerializer(user).data)
 
 
 class ProfilePhotoView(APIView):
