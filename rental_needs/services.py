@@ -4,6 +4,7 @@ from django.utils import timezone
 from items.models import Item
 from orders.models import Order, Offer
 from orders.services import overlapping_bookings
+from orders import services as order_services
 
 from .models import RentalNeed, RentalNeedResponse
 
@@ -109,3 +110,60 @@ def respond_to_need(need_id, provider, item_id, hourly_rate, message=""):
     )
 
     return response
+
+def cancel_pending_responses(need_id, requester):
+
+    order_ids = RentalNeedResponse.objects.filter(
+        rental_need_id=need_id
+    ).values_list("order_id", flat=True)
+
+    pending_orders = Order.objects.filter(
+        pk__in=order_ids,
+        status=Order.Status.REQUESTED,
+    )
+
+    for order in pending_orders.iterator():
+
+        # The requester is the borrower in every response Order.
+        # Reuse the existing cancellation workflow.
+        order_services.cancel_order(order, requester)
+
+
+def cancel_rental_need(need, requester):
+
+    if need.requester_id != requester.id:
+        raise RentalNeedPermissionError(
+            "You cannot cancel someone else's rental request."
+        )
+
+    from django.utils import timezone
+
+    with transaction.atomic():
+
+        # Conditional update prevents cancellation from racing
+        # against an offer acceptance.
+        updated = RentalNeed.objects.filter(
+            pk=need.pk,
+            status=RentalNeed.Status.OPEN,
+        ).update(
+            status=RentalNeed.Status.CANCELLED,
+            updated_at=timezone.now(),
+        )
+
+        if not updated:
+            raise RentalNeedError(
+                "Only open rental requests can be cancelled."
+            )
+
+        # Cancel associated Orders after the RentalNeed transaction commits.
+        transaction.on_commit(
+            lambda: cancel_pending_responses(
+                need.pk,
+                requester,
+            ),
+            robust=True,
+        )
+
+    need.status = RentalNeed.Status.CANCELLED
+
+    return need

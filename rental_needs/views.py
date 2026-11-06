@@ -149,34 +149,29 @@ class RentalNeedCancelView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request, pk):
 
-        # Lock the record while cancelling it.
         need = get_object_or_404(
-            RentalNeed.objects.select_for_update(),
+            RentalNeed,
             pk=pk,
         )
 
-        if need.requester_id != request.user.id:
-            raise PermissionDenied(
-                "You cannot cancel someone else's rental request."
+        try:
+            need = services.cancel_rental_need(
+                need,
+                request.user,
             )
 
-        if need.status != RentalNeed.Status.OPEN:
-            raise ValidationError(
-                {"detail": "Only open requests can be cancelled."}
-            )
+        except services.RentalNeedPermissionError as error:
+            raise PermissionDenied(str(error))
 
-        need.status = RentalNeed.Status.CANCELLED
-
-        need.save(update_fields=["status", "updated_at"])
+        except services.RentalNeedError as error:
+            raise ValidationError({"detail": str(error)})
 
         return Response(
             RentalNeedSerializer(need).data,
             status=status.HTTP_200_OK,
         )
-
 
 class RentalNeedRespondView(APIView):
 
