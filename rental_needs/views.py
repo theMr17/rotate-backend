@@ -39,12 +39,8 @@ class RentalNeedListCreateView(APIView):
             needs = needs.filter(requester=request.user)
 
         else:
-            # Public discovery feed:
-            # Show only open requests from other users.
+            # Show all open requests, including the current user's own requests.
             needs = needs.filter(status=RentalNeed.Status.OPEN)
-
-            if request.user.is_authenticated:
-                needs = needs.exclude(requester=request.user)
 
         # Search title, description and category.
         search = request.query_params.get("search")
@@ -186,11 +182,15 @@ class RentalNeedRespondView(APIView):
 
         serializer.is_valid(raise_exception=True)
 
+        data = serializer.validated_data
+
         try:
             response = services.respond_to_need(
                 need_id=pk,
                 provider=request.user,
-                **serializer.validated_data,
+                item_id=data["item"].id,
+                hourly_rate=data["hourly_rate"],
+                message=data.get("message", ""),
             )
 
         except RentalNeed.DoesNotExist:
