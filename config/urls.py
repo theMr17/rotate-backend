@@ -18,12 +18,15 @@ from django.contrib import admin
 from django.urls import include, path
 
 from health.views import health_check
+from user.views import PublicProfileView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', health_check, name='health-check'),
 
     path('api/v1/user/', include('user.urls')),
+    path('api/v1/users/<int:user_id>', PublicProfileView.as_view(), name='public-profile'),
+    path('api/v1/', include('trust.urls')),
     path('api/v1/', include('orders.urls')),
     path('api/v1/', include('items.urls')),
     path('api-auth/', include('rest_framework.urls')),
