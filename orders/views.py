@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from . import services
 from .models import InvalidTransition, Order
-from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer
+from .serializers import CounterOfferSerializer, OrderSerializer, RentalRequestSerializer, PhotoUploadSerializer, ResolveDisputeSerializer
 
 class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):   
     serializer_class = OrderSerializer
@@ -15,16 +15,23 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
 
     def get_queryset(self):
         user = self.request.user
-        queryset = (
-            Order.objects.filter(Q(borrower=user) | Q(lender=user))
-            .select_related('item', 'borrower', 'lender')
-            .prefetch_related('offers__proposed_by')
+        if user.is_staff:
+            queryset = Order.objects.all()
+        else:
+            queryset = Order.objects.filter(Q(borrower=user) | Q(lender=user))
+        queryset = queryset.select_related('item', 'borrower', 'lender').prefetch_related(
+            'offers__proposed_by', 'photos__uploaded_by'
         )
+
         role = self.request.query_params.get('role')
         if role == 'borrower':
             queryset = queryset.filter(borrower=user)
         elif role == 'lender':
             queryset = queryset.filter(lender=user)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
         return queryset
 
     def create(self, request):
@@ -33,7 +40,7 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
         order = self._run(
             services.request_rental, borrower=request.user, **serializer.validated_data
         )
-        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+        return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def counter(self, request, pk=None):
@@ -43,17 +50,62 @@ class OrderViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Crea
             services.counter_offer, self.get_object(), request.user,
             **serializer.validated_data,
         )
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def accept(self, request, pk=None):
         self._run(services.accept_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         self._run(services.reject_offer, self.get_object(), request.user)
-        return Response(OrderSerializer(self.get_object()).data)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        self._run(services.cancel_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        self._run(services.start_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'], url_path='return')
+    def mark_returned(self, request, pk=None):
+        self._run(services.return_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        self._run(services.complete_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def dispute(self, request, pk=None):
+        self._run(services.dispute_order, self.get_object(), request.user)
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def photos(self, request, pk=None):
+        serializer = PhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._run(
+            services.add_condition_photo, self.get_object(), request.user,
+            **serializer.validated_data,
+        )
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        serializer = ResolveDisputeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._run(
+            services.resolve_dispute, self.get_object(), request.user,
+            **serializer.validated_data,
+        )
+        return Response(self.get_serializer(self.get_object()).data)
 
     def _run(self, func, *args, **kwargs):
         try:

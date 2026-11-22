@@ -1,7 +1,8 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Offer, Order
+from .models import ConditionPhoto, Offer, Order
+from .photos import delete_condition_photo, upload_condition_photo
 from items.models import Item
 
 
@@ -119,4 +120,116 @@ def reject_offer(order, user):
         offer.status = Offer.Status.REJECTED
         offer.save(update_fields=['status'])
         order.transition_to(Order.Status.REJECTED)
+    return order
+
+def available_actions(order, user):
+    if user.is_staff and order.status == Order.Status.DISPUTED:
+        return ['resolve']
+    is_lender = order.lender_id == user.id
+    is_borrower = order.borrower_id == user.id
+    actions = []
+
+    if order.status == Order.Status.REQUESTED:
+        for offer in order.offers.all():
+            if offer.status == Offer.Status.PENDING and offer.proposed_by_id != user.id:
+                return ['accept', 'counter', 'reject']
+        actions.append('cancel')
+
+    elif order.status == Order.Status.ACCEPTED:
+        if is_lender:
+            actions.append('start')
+        actions.append('cancel')
+
+    elif order.status == Order.Status.ACTIVE:
+        if is_borrower:
+            actions.append('return')
+
+    elif order.status == Order.Status.RETURNED:
+        if is_lender:
+            actions.append('complete')
+        actions.append('dispute')
+
+    return actions
+
+def _lock_order(order):
+    return Order.objects.select_for_update().get(pk=order.pk)
+
+def _check_participant(order, user):
+    if user.id not in (order.borrower_id, order.lender_id):
+        raise OrderError('You are not part of this order.')
+
+def cancel_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        _check_participant(order, user)
+        order.offers.filter(status=Offer.Status.PENDING).update(status=Offer.Status.REJECTED)
+        order.transition_to(Order.Status.CANCELLED)
+    return order
+
+def start_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.lender_id:
+            raise OrderError('Only the lender can confirm the handover.')
+        if not order.photos.filter(stage=ConditionPhoto.Stage.PRE).exists():
+            raise OrderError('Add at least one handover photo before confirming the handover.')
+        order.transition_to(Order.Status.ACTIVE)
+    return order
+
+def return_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.borrower_id:
+            raise OrderError('Only the borrower can mark the item as returned.')
+        if not order.photos.filter(stage=ConditionPhoto.Stage.POST).exists():
+            raise OrderError('Add at least one return photo before marking the item as returned.')
+        order.transition_to(Order.Status.RETURNED)
+    return order
+
+def complete_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        if user.id != order.lender_id:
+            raise OrderError('Only the lender can complete the order.')
+        order.deposit_deducted = 0
+        order.save(update_fields=['deposit_deducted'])
+        order.transition_to(Order.Status.COMPLETED)
+    return order
+
+def dispute_order(order, user):
+    with transaction.atomic():
+        order = _lock_order(order)
+        _check_participant(order, user)
+        order.transition_to(Order.Status.DISPUTED)
+    return order
+
+def add_condition_photo(order, user, stage, image):
+    _check_participant(order, user)
+    if stage == ConditionPhoto.Stage.PRE and order.status != Order.Status.ACCEPTED:
+        raise OrderError('Handover photos can only be added before the handover.')
+    if stage == ConditionPhoto.Stage.POST and order.status not in (Order.Status.ACTIVE, Order.Status.RETURNED):
+        raise OrderError('Return photos can only be added during or after the rental.')
+    # Raises ImageStorageNotConfigured (503) / ImageUploadFailed (502).
+    url, public_id = upload_condition_photo(order, stage, image)
+    try:
+        return ConditionPhoto.objects.create(
+            order=order, stage=stage, image_url=url, image_public_id=public_id, uploaded_by=user,
+        )
+    except Exception:
+        delete_condition_photo(public_id)
+        raise
+
+def resolve_dispute(order, admin, deduction, note=''):
+    if not admin.is_staff:
+        raise OrderError('Only an admin can resolve disputes.')
+    with transaction.atomic():
+        order = _lock_order(order)
+        if order.status != Order.Status.DISPUTED:
+            raise OrderError('Only disputed orders can be resolved.')
+        if deduction < 0 or deduction > order.deposit_amount:
+            raise OrderError(f'Deduction must be between 0 and {order.deposit_amount}.')
+        order.deposit_deducted = deduction
+        order.resolution_note = note
+        order.save(update_fields=['deposit_deducted', 'resolution_note'])
+        order.transition_to(Order.Status.COMPLETED)
     return order

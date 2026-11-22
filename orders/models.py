@@ -45,6 +45,8 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True
     )
     deposit_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    deposit_deducted = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    resolution_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -101,3 +103,21 @@ class Offer(models.Model):
 
     def __str__(self):
         return f'Offer Rs{self.hourly_rate}/hr on Order #{self.order_id} ({self.status})'
+
+
+class ConditionPhoto(models.Model):
+    class Stage(models.TextChoices):
+        PRE = 'pre', 'Before rental'
+        POST = 'post', 'After return'
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='photos')
+    stage = models.CharField(max_length=10, choices=Stage.choices)
+    image_url = models.URLField(max_length=500)
+    image_public_id = models.CharField(max_length=255)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='condition_photos'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
