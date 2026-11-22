@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'user',
     'items',
     'orders',
+    'rental_needs.apps.RentalNeedsConfig',
     'trust',
 ]
 
