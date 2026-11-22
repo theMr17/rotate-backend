@@ -2,6 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import ConditionPhoto, Offer, Order
+from .photos import delete_condition_photo, upload_condition_photo
 from items.models import Item
 
 
@@ -208,7 +209,15 @@ def add_condition_photo(order, user, stage, image):
         raise OrderError('Handover photos can only be added before the handover.')
     if stage == ConditionPhoto.Stage.POST and order.status not in (Order.Status.ACTIVE, Order.Status.RETURNED):
         raise OrderError('Return photos can only be added during or after the rental.')
-    return ConditionPhoto.objects.create(order=order, stage=stage, image=image, uploaded_by=user)
+    # Raises ImageStorageNotConfigured (503) / ImageUploadFailed (502).
+    url, public_id = upload_condition_photo(order, stage, image)
+    try:
+        return ConditionPhoto.objects.create(
+            order=order, stage=stage, image_url=url, image_public_id=public_id, uploaded_by=user,
+        )
+    except Exception:
+        delete_condition_photo(public_id)
+        raise
 
 def resolve_dispute(order, admin, deduction, note=''):
     if not admin.is_staff:

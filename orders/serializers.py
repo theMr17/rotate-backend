@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from decimal import Decimal
 from items.models import Item
+from uploads import ImageUploadField
 from .models import *
 from . import services
 
@@ -15,11 +16,11 @@ class ConditionPhotoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ConditionPhoto
-        fields = ['id', 'stage', 'image', 'uploaded_by', 'created_at']
+        fields = ['id', 'stage', 'image_url', 'uploaded_by', 'created_at']
 
 class PhotoUploadSerializer(serializers.Serializer):
     stage = serializers.ChoiceField(choices=ConditionPhoto.Stage.choices)
-    image = serializers.ImageField()
+    image = ImageUploadField()
 
 class OrderSerializer(serializers.ModelSerializer):
     borrower = serializers.StringRelatedField()

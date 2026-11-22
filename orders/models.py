@@ -112,7 +112,8 @@ class ConditionPhoto(models.Model):
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='photos')
     stage = models.CharField(max_length=10, choices=Stage.choices)
-    image = models.ImageField(upload_to='condition_photos/')
+    image_url = models.URLField(max_length=500)
+    image_public_id = models.CharField(max_length=255)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='condition_photos'
     )

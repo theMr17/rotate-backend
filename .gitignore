@@ -7,4 +7,3 @@ staticfiles/
 .pytest_cache/
 venv/
 .venv/
-media/
