@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.gis',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
     'user',
     'items',
     'orders',
+    'trust',
 ]
 
 MIDDLEWARE = [
@@ -77,7 +79,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
         'NAME': os.environ.get('POSTGRES_DB'),
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
@@ -153,3 +155,14 @@ CORS_ALLOWED_ORIGINS = [
     for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
     if origin.strip()
 ]
+
+
+CLOUDINARY = {
+    'cloud_name': os.environ.get('CLOUDINARY_CLOUD_NAME', ''),
+    'api_key': os.environ.get('CLOUDINARY_API_KEY', ''),
+    'api_secret': os.environ.get('CLOUDINARY_API_SECRET', ''),
+    'secure': True,
+}
+
+CLOUDINARY_ROOT_FOLDER = os.environ.get('CLOUDINARY_ROOT_FOLDER', 'rotate')
+IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024

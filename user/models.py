@@ -1,6 +1,6 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.db import models
+from django.contrib.gis.db import models
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -35,6 +35,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=32, blank=True)
     location = models.CharField(max_length=255, blank=True)
+    home_location = models.PointField(
+        geography=True, srid=4326, null=True, blank=True, spatial_index=True
+    )
+    home_address_label = models.CharField(max_length=255, blank=True)
+    profile_photo_url = models.URLField(max_length=500, blank=True)
+    profile_photo_public_id = models.CharField(max_length=255, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.USER)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
