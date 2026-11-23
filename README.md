@@ -2,8 +2,23 @@
 
 Backend service for the Rotate rental platform, built using Django, Django REST Framework, and PostgreSQL.
 
-## Getting Started
 
+
+# AI Assistance Declaration
+
+### i. Rental Needs
+•⁠  ⁠*Frontend:* AI assistance was used in ⁠ app/rental-needs/ ⁠, to implement the rental-request feature. For example ⁠ app/rental-needs/[id]/page.tsx ⁠ file. This feature was developed towards the later stages and involved complex integration with the existing Orders and Offers workflow.
+
+•⁠  ⁠*Backend:* AI assistance was used in ⁠ rental_needs/signals.py ⁠, especially for integrating Rental Needs with the order lifecycle.
+
+### ii. Rating and Review System
+AI assistance helped in developing this feature. This included developing the underlying functionality, connecting the APIs, and integrating the feature into the existing application workflow. ex -
+
+•⁠  ⁠*Frontend:*  TrustBadges.tsx
+
+•⁠  ⁠*Backend:*   trust/
+
+## Getting Started
 ### 1. Clone the repository
 
 ```bash
